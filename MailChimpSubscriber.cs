@@ -1,10 +1,9 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.Networking;
 using UnityEngine.UI;
 using System;
-using System.Collections.Generic;
 using System.Collections;
-using System.Text;
 using System.Net.Mail;
 
 
@@ -45,11 +44,11 @@ namespace Fiftytwo
         {
             if( IsValidEmail( email ) )
             {
-                var www = BuildWWW( email );
+                var request = BuildRequest( email );
 
-                if( www != null )
+                if( request != null )
                 {
-                    StartCoroutine( SendToMailChimp( www ));
+                    StartCoroutine( SendToMailChimp( request ));
                 }
                 else
                 {
@@ -70,7 +69,7 @@ namespace Fiftytwo
 
             try
             {
-                var mailAdress = new MailAddress( email );
+                new MailAddress( email );
 
                 return true;
             }
@@ -80,29 +79,25 @@ namespace Fiftytwo
             }
         }
 
-        private IEnumerator SendToMailChimp ( WWW www )
+        private IEnumerator SendToMailChimp ( UnityWebRequest request )
         {
-            yield return www;
+            yield return request;
 
-            if( string.IsNullOrEmpty( www.error ) )
+            if( string.IsNullOrEmpty( request.error ) )
             {
                 Debug.Log( "MailChimp — Subscribe success" );
                 _subscribeSuccess.Invoke();
             }
             else
             {
-                Debug.Log( "MailChimp — Subscribe error: " + www.error );
+                Debug.Log( "MailChimp — Subscribe error: " + request.error );
                 _subscribeError.Invoke();
             }
         }
 
-        private WWW BuildWWW ( string email )
+        private UnityWebRequest BuildRequest ( string email )
         {
-            var headers = new Dictionary<string,string>();
-            headers.Add( "Authorization", "apikey " + _apiKey );
-
             var data = string.Format( DataFormat, email );
-            var dataBytes = Encoding.ASCII.GetBytes( data );
 
             var splittedApiKey = _apiKey.Split( '-' );
 
@@ -115,9 +110,11 @@ namespace Fiftytwo
             var urlPrefix = splittedApiKey[1];
 
             var url = string.Format( UrlFormat, urlPrefix, _listId );
-            var www = new WWW( url, dataBytes, headers );
 
-            return www;
+            var webRequest = UnityWebRequest.Post( url, data );
+            webRequest.SetRequestHeader( "Authorization", "apikey " + _apiKey );
+
+            return webRequest;
         }
     }
 }
