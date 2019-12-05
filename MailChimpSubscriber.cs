@@ -1,9 +1,10 @@
 using UnityEngine;
 using UnityEngine.Events;
-using UnityEngine.Networking;
 using UnityEngine.UI;
 using System;
+using System.Collections.Generic;
 using System.Collections;
+using System.Text;
 using System.Net.Mail;
 
 
@@ -15,14 +16,14 @@ namespace Fiftytwo
         private const string DataFormat = "{{\"email_address\":\"{0}\", \"status\":\"subscribed\"}}";
 
         [SerializeField]
+        public MailChimpEvent SubscribeSuccess;
+        [SerializeField]
+        public MailChimpEvent SubscribeError;
+
+        [SerializeField]
         private string _apiKey;
         [SerializeField]
         private string _listId;
-
-        [SerializeField]
-        private UnityEvent _subscribeSuccess;
-        [SerializeField]
-        private UnityEvent _subscribeError;
 
 
         public void Subscribe ()
@@ -44,21 +45,12 @@ namespace Fiftytwo
         {
             if( IsValidEmail( email ) )
             {
-                var request = BuildRequest( email );
-
-                if( request != null )
-                {
-                    StartCoroutine( SendToMailChimp( request ));
-                }
-                else
-                {
-                    _subscribeError.Invoke();
-                }
+                StartCoroutine( SendToMailChimp( email ));
             }
             else
             {
                 Debug.Log( "MailChimp — Invalid email" );
-                _subscribeError.Invoke();
+                SubscribeError.Invoke( email );
             }
         }
 
@@ -79,25 +71,39 @@ namespace Fiftytwo
             }
         }
 
-        private IEnumerator SendToMailChimp ( UnityWebRequest request )
+        private IEnumerator SendToMailChimp ( string email )
         {
-            yield return request;
+            var www = BuildWWW( email );
 
-            if( string.IsNullOrEmpty( request.error ) )
+            if( www == null )
             {
-                Debug.Log( "MailChimp — Subscribe success" );
-                _subscribeSuccess.Invoke();
+                Debug.Log( "MailChimp — Subscribe error: can't build request" );
+                SubscribeError.Invoke( email );
             }
             else
             {
-                Debug.Log( "MailChimp — Subscribe error: " + request.error );
-                _subscribeError.Invoke();
+                yield return www;
+
+                if( string.IsNullOrEmpty( www.error ) )
+                {
+                    Debug.Log( "MailChimp — Subscribe success" );
+                    SubscribeSuccess.Invoke( email );
+                }
+                else
+                {
+                    Debug.Log( "MailChimp — Subscribe error: " + www.error );
+                    SubscribeError.Invoke( email );
+                }
             }
         }
 
-        private UnityWebRequest BuildRequest ( string email )
+        private WWW BuildWWW ( string email )
         {
+            var headers = new Dictionary<string,string>();
+            headers.Add( "Authorization", "apikey " + _apiKey );
+
             var data = string.Format( DataFormat, email );
+            var dataBytes = Encoding.ASCII.GetBytes( data );
 
             var splittedApiKey = _apiKey.Split( '-' );
 
@@ -110,11 +116,14 @@ namespace Fiftytwo
             var urlPrefix = splittedApiKey[1];
 
             var url = string.Format( UrlFormat, urlPrefix, _listId );
+            var www = new WWW( url, dataBytes, headers );
 
-            var webRequest = UnityWebRequest.Post( url, data );
-            webRequest.SetRequestHeader( "Authorization", "apikey " + _apiKey );
+            return www;
+        }
 
-            return webRequest;
+        [Serializable]
+        public class MailChimpEvent : UnityEvent<string>
+        {
         }
     }
 }
